@@ -1,9 +1,11 @@
 package com.timgroup.jgravatar;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
+import java.net.URI;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,8 +13,6 @@ import javax.annotation.concurrent.Immutable;
 
 import com.google.common.base.Joiner;
 import com.google.common.hash.Hashing;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Closeables;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -160,7 +160,7 @@ public final class Gravatar {
         // hexadecimal MD5 hash of the requested user's lowercased email address
         // with all whitespace trimmed
         String emailHash = Hashing.md5()
-                                  .hashString(email.toLowerCase().trim(), Charset.forName("UTF-8"))
+                                  .hashString(email.toLowerCase().trim(), StandardCharsets.UTF_8)
                                   .toString();
         
         String params = formatUrlParameters();
@@ -179,17 +179,27 @@ public final class Gravatar {
      * @return bytes of the jpg image
      */
     public byte[] download(String email) throws GravatarDownloadException {
-        InputStream stream = null;
+        String url = getUrl(email);
+
         try {
-            URL url = new URL(getUrl(email));
-            stream = url.openStream();
-            return ByteStreams.toByteArray(stream);
-        } catch (FileNotFoundException e) {
-            return null;
+            HttpRequest req = HttpRequest.newBuilder()
+                    .GET()
+                    .uri(new URI(url))
+                    .build();
+
+            HttpClient client = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.ALWAYS)
+                    .build();
+
+            HttpResponse<byte[]> response = client.send(req, HttpResponse.BodyHandlers.ofByteArray());
+
+            if (response.statusCode() == 404) {
+                return null;
+            }
+
+            return response.body();
         } catch (Exception e) {
             throw new GravatarDownloadException(e);
-        } finally {
-            Closeables.closeQuietly(stream);
         }
     }
 
