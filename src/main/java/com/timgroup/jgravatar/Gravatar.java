@@ -1,7 +1,5 @@
 package com.timgroup.jgravatar;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -11,8 +9,9 @@ import javax.annotation.concurrent.Immutable;
 
 import com.google.common.base.Joiner;
 import com.google.common.hash.Hashing;
-import com.google.common.io.ByteStreams;
-import com.google.common.io.Closeables;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -162,7 +161,7 @@ public final class Gravatar {
         String emailHash = Hashing.md5()
                                   .hashString(email.toLowerCase().trim(), Charset.forName("UTF-8"))
                                   .toString();
-        
+
         String params = formatUrlParameters();
 
         String urlParams = emailHash + ".jpg" + params;
@@ -179,17 +178,21 @@ public final class Gravatar {
      * @return bytes of the jpg image
      */
     public byte[] download(String email) throws GravatarDownloadException {
-        InputStream stream = null;
-        try {
-            URL url = new URL(getUrl(email));
-            stream = url.openStream();
-            return ByteStreams.toByteArray(stream);
-        } catch (FileNotFoundException e) {
-            return null;
+        String url = getUrl(email);
+
+        OkHttpClient client = new OkHttpClient();
+
+        Request request = new Request.Builder()
+                .url(url)
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (response.code() != 200) {
+                return null;
+            }
+            return response.body().bytes();
         } catch (Exception e) {
             throw new GravatarDownloadException(e);
-        } finally {
-            Closeables.closeQuietly(stream);
         }
     }
 
